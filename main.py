@@ -7,6 +7,8 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 # Import a specific exception to handle cases where an element we want to click is blocked or hidden
 from selenium.common.exceptions import ElementClickInterceptedException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 # Import the time module to pause the script, giving the browser time to load pages and elements
 import time
 import os
@@ -51,12 +53,12 @@ class InstaFollower:
         else:
             self.driver = webdriver.Chrome(options=chrome_options)
 
-        self.driver.set_page_load_timeout(30)
-        self.driver.implicitly_wait(5)
+        self.driver.set_page_load_timeout(60)
+        self.driver.implicitly_wait(10)
 
     def login(self):
         self.driver.get(LOGIN_URL)
-        time.sleep(2)
+        time.sleep(3)
 
         decline = self.driver.find_elements(By.XPATH, "//button[contains(text(), 'Decline')]")
         if decline:
@@ -70,7 +72,7 @@ class InstaFollower:
         
         time.sleep(1)
         password.send_keys(Keys.ENTER)
-        time.sleep(2)
+        time.sleep(4)
 
         save_info = self.driver.find_elements(By.XPATH, "//div[contains(text(), 'Not now')]")
         if save_info:
@@ -84,9 +86,13 @@ class InstaFollower:
     def find_followers(self, target_account=None):
         account = target_account.strip() if target_account else SIMILAR_ACCOUNT
         self.driver.get(f"{BASE_URL}/u/{account}/followers")
-        time.sleep(2)
+        time.sleep(3)
 
-        modal = self.driver.find_element(By.CSS_SELECTOR, ".followers-scroll")
+        # Wait explicitly for the followers modal to appear (up to 15s)
+        modal = WebDriverWait(self.driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".followers-scroll"))
+        )
+        time.sleep(1)
         
         # Scroll 5 times for efficient cloud execution
         for _ in range(5):
