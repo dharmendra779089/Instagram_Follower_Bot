@@ -27,7 +27,6 @@ class InstaFollower:
         
         # Check if headless mode is specified or running on Linux/Docker
         if headless or (headless is None and os.name != 'nt'):
-            # Path to system installed chromium on Linux if present
             if os.path.exists("/usr/bin/chromium"):
                 chrome_options.binary_location = "/usr/bin/chromium"
             elif os.path.exists("/usr/bin/chromium-browser"):
@@ -82,13 +81,14 @@ class InstaFollower:
         if notifications:
             notifications[0].click()
 
-    def find_followers(self):
-        self.driver.get(f"{BASE_URL}/u/{SIMILAR_ACCOUNT}/followers")
+    def find_followers(self, target_account=None):
+        account = target_account.strip() if target_account else SIMILAR_ACCOUNT
+        self.driver.get(f"{BASE_URL}/u/{account}/followers")
         time.sleep(2)
 
         modal = self.driver.find_element(By.CSS_SELECTOR, ".followers-scroll")
         
-        # Scroll 5 times for cloud efficiency
+        # Scroll 5 times for efficient cloud execution
         for _ in range(5):
             self.driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", modal)
             time.sleep(1)
@@ -114,7 +114,8 @@ class InstaFollower:
             pass
 
 
-def run_bot(headless=True, log_callback=None):
+def run_bot(headless=True, target_account=None, log_callback=None):
+    account = target_account.strip() if target_account else SIMILAR_ACCOUNT
     def log(msg):
         if log_callback:
             log_callback(msg)
@@ -127,13 +128,13 @@ def run_bot(headless=True, log_callback=None):
         log("Logging into application...")
         bot.login()
         
-        log(f"Fetching followers for '@{SIMILAR_ACCOUNT}'...")
-        bot.find_followers()
+        log(f"Fetching followers for '@{account}'...")
+        bot.find_followers(target_account=account)
         
         log("Following users...")
         count = bot.follow()
         
-        success_msg = f"Successfully completed! Followed {count} users on target account '@{SIMILAR_ACCOUNT}'."
+        success_msg = f"Successfully completed! Followed {count} users on target account '@{account}'."
         log(success_msg)
         return True, success_msg
     except Exception as e:

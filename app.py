@@ -9,7 +9,7 @@ app = Flask(__name__)
 execution_status = {
     "status": "idle",  # idle, running, completed, error
     "message": "Ready to run Instagram Follower Bot.",
-    "last_run": None
+    "target_account": SIMILAR_ACCOUNT
 }
 
 HTML_TEMPLATE = """
@@ -79,6 +79,51 @@ HTML_TEMPLATE = """
             font-size: 0.875rem;
             color: #94a3b8;
             margin-top: 4px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #cbd5e1;
+            margin-bottom: 8px;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-prefix {
+            position: absolute;
+            left: 16px;
+            color: #64748b;
+            font-weight: 600;
+            font-size: 1rem;
+            pointer-events: none;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 14px 16px 14px 36px;
+            background: #1e293b;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #f8fafc;
+            font-size: 1rem;
+            font-weight: 500;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .form-input:focus {
+            border-color: #8b5cf6;
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25);
         }
 
         .info-box {
@@ -177,11 +222,15 @@ HTML_TEMPLATE = """
             </div>
         </div>
 
-        <div class="info-box">
-            <div class="info-row">
-                <span class="info-label">Target Account</span>
-                <span class="info-value">@{{ target_account }}</span>
+        <div class="form-group">
+            <label class="form-label" for="targetAccount">Target Account Handle</label>
+            <div class="input-wrapper">
+                <span class="input-prefix">@</span>
+                <input type="text" id="targetAccount" class="form-input" value="{{ default_account }}" placeholder="Enter username (e.g. chefsteps)">
             </div>
+        </div>
+
+        <div class="info-box">
             <div class="info-row">
                 <span class="info-label">Environment</span>
                 <span class="info-value">Headless Chromium (Render Docker)</span>
@@ -200,17 +249,26 @@ HTML_TEMPLATE = """
 
         async function startBot() {
             const btn = document.getElementById('runBtn');
+            const targetInput = document.getElementById('targetAccount');
+            const targetAccount = targetInput.value.trim() || 'chefsteps';
+
             btn.disabled = true;
+            targetInput.disabled = true;
             btn.innerText = 'Initializing Bot...';
 
             try {
-                const res = await fetch('/run', { method: 'POST' });
+                const res = await fetch('/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_account: targetAccount })
+                });
                 const data = await res.json();
                 updateUI(data.status, data.message);
                 if (!isPolling) pollStatus();
             } catch (err) {
                 updateUI('error', 'Failed to trigger bot request.');
                 btn.disabled = false;
+                targetInput.disabled = false;
                 btn.innerText = 'Run Follower Bot Now';
             }
         }
@@ -227,7 +285,9 @@ HTML_TEMPLATE = """
                 } else {
                     isPolling = false;
                     const btn = document.getElementById('runBtn');
+                    const targetInput = document.getElementById('targetAccount');
                     btn.disabled = false;
+                    targetInput.disabled = false;
                     btn.innerText = 'Run Follower Bot Now';
                 }
             } catch (err) {
@@ -257,18 +317,19 @@ HTML_TEMPLATE = """
 
 @app.route("/")
 def index():
-    return render_template_string(HTML_TEMPLATE, target_account=SIMILAR_ACCOUNT)
+    return render_template_string(HTML_TEMPLATE, default_account=SIMILAR_ACCOUNT)
 
 def log_progress(msg):
     global execution_status
     execution_status["message"] = msg
 
-def execute_bot_background():
+def execute_bot_background(target):
     global execution_status
     execution_status["status"] = "running"
-    execution_status["message"] = "Initializing Chromium..."
+    execution_status["target_account"] = target
+    execution_status["message"] = f"Initializing Chromium for target @{target}..."
     
-    success, msg = run_bot(headless=True, log_callback=log_progress)
+    success, msg = run_bot(headless=True, target_account=target, log_callback=log_progress)
     
     if success:
         execution_status["status"] = "completed"
@@ -283,12 +344,16 @@ def trigger_bot():
     if execution_status["status"] == "running":
         return jsonify(execution_status)
 
-    thread = threading.Thread(target=execute_bot_background)
+    data = request.get_json(silent=True) or {}
+    target = data.get("target_account", SIMILAR_ACCOUNT).strip() or SIMILAR_ACCOUNT
+
+    thread = threading.Thread(target=execute_bot_background, args=(target,))
     thread.daemon = True
     thread.start()
     
     execution_status["status"] = "running"
-    execution_status["message"] = "Bot execution started."
+    execution_status["target_account"] = target
+    execution_status["message"] = f"Bot started for target @{target}."
     return jsonify(execution_status)
 
 @app.route("/status")
