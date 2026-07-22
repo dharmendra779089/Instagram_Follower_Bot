@@ -147,7 +147,19 @@ def run_bot(headless=True, target_account=None, log_callback=None):
 
 
 if __name__ == "__main__":
+    import sys
+
+    # Accept target from command-line arg or prompt the user
+    if len(sys.argv) > 1:
+        target = sys.argv[1].strip().lstrip("@")
+    else:
+        target = input(f"Enter target account (default: {SIMILAR_ACCOUNT}): @").strip()
+        if not target:
+            target = SIMILAR_ACCOUNT
+
+    print(f"\n🎯 Target account: @{target}\n")
+
     bot = InstaFollower()
     bot.login()
-    bot.find_followers()
+    bot.find_followers(target_account=target)
     bot.follow()
