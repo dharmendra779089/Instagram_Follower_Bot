@@ -6,7 +6,7 @@ from selenium.webdriver.common.keys import Keys
 # Import By to specify how we want to locate elements on the page (e.g., by Name, XPath, CSS Selector)
 from selenium.webdriver.common.by import By
 # Import a specific exception to handle cases where an element we want to click is blocked or hidden
-from selenium.common.exceptions import ElementClickInterceptedException
+from selenium.common.exceptions import ElementClickInterceptedException, WebDriverException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 # Import the time module to pause the script, giving the browser time to load pages and elements
@@ -21,6 +21,8 @@ PASSWORD = "0iMlWJGUcr4uz5Ia"
 BASE_URL = "https://app.100daysofpython.dev/services/share-a-naan" 
 LOGIN_URL = f"{BASE_URL}/login"
 
+MAX_RETRIES = 2
+
 
 class InstaFollower:
 
@@ -34,20 +36,14 @@ class InstaFollower:
             elif os.path.exists("/usr/bin/chromium-browser"):
                 chrome_options.binary_location = "/usr/bin/chromium-browser"
 
-            chrome_options.add_argument("--headless=new")
+            chrome_options.add_argument("--headless")
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--disable-extensions")
             chrome_options.add_argument("--disable-software-rasterizer")
             chrome_options.add_argument("--disable-background-networking")
-            chrome_options.add_argument("--disable-default-apps")
-            chrome_options.add_argument("--disable-sync")
-            chrome_options.add_argument("--disable-translate")
             chrome_options.add_argument("--no-first-run")
-            chrome_options.add_argument("--single-process")
-            chrome_options.add_argument("--no-zygote")
-            chrome_options.add_argument("--js-flags=--max-old-space-size=256")
             chrome_options.add_argument("--window-size=1280,720")
             chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         else:
@@ -136,30 +132,41 @@ def run_bot(headless=True, target_account=None, log_callback=None):
         if log_callback:
             log_callback(msg)
 
-    bot = None
-    try:
-        log("Initializing Chromium browser...")
-        bot = InstaFollower(headless=headless)
-        
-        log("Logging into application...")
-        bot.login()
-        
-        log(f"Fetching followers for '@{account}'...")
-        bot.find_followers(target_account=account)
-        
-        log("Following users...")
-        count = bot.follow()
-        
-        success_msg = f"Successfully completed! Followed {count} users on target account '@{account}'."
-        log(success_msg)
-        return True, success_msg
-    except Exception as e:
-        err_msg = f"Error during execution: {str(e)}"
-        log(err_msg)
-        return False, err_msg
-    finally:
-        if bot:
-            bot.close()
+    last_err = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        bot = None
+        try:
+            if attempt > 1:
+                log(f"Retry attempt {attempt}/{MAX_RETRIES}...")
+                time.sleep(3)
+
+            log("Initializing Chromium browser...")
+            bot = InstaFollower(headless=headless)
+            
+            log("Logging into application...")
+            bot.login()
+            
+            log(f"Fetching followers for '@{account}'...")
+            bot.find_followers(target_account=account)
+            
+            log("Following users...")
+            count = bot.follow()
+            
+            success_msg = f"Successfully completed! Followed {count} users on target account '@{account}'."
+            log(success_msg)
+            return True, success_msg
+
+        except (WebDriverException, Exception) as e:
+            last_err = str(e)
+            err_msg = f"Attempt {attempt} failed: {last_err}"
+            log(err_msg)
+        finally:
+            if bot:
+                bot.close()
+
+    final_msg = f"Failed after {MAX_RETRIES} attempts. Last error: {last_err}"
+    log(final_msg)
+    return False, final_msg
 
 
 if __name__ == "__main__":
