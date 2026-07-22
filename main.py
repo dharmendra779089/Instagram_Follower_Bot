@@ -8,6 +8,7 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import ElementClickInterceptedException
 # Import the time module to pause the script, giving the browser time to load pages and elements
 import time
+import os
 
 # --- CONSTANTS ---
 # The target account name whose followers we want to automatically follow
@@ -27,12 +28,23 @@ LOGIN_URL = f"{BASE_URL}/login"
 class InstaFollower:
 
     # The __init__ method is called automatically when we create a new instance of the bot
-    def __init__(self):
+    def __init__(self, headless=None):
         # Create an object to configure the Chrome browser's settings
         chrome_options = webdriver.ChromeOptions()
-        # Add a special option to keep the browser open even after the script finishes executing
-        chrome_options.add_experimental_option("detach", True)  
-        # Initialize the Chrome webdriver with the options we just configured, opening the browser window
+        
+        # Check if headless mode is specified or running on Linux/Docker
+        if headless or (headless is None and os.name != 'nt'):
+            chrome_options.add_argument("--headless=new")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--window-size=1920,1080")
+            chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        else:
+            # Add a special option to keep the browser open even after the script finishes executing
+            chrome_options.add_experimental_option("detach", True)  
+
+        # Initialize the Chrome webdriver with the options we just configured
         self.driver = webdriver.Chrome(options=chrome_options)
 
     # Method to handle the login process
@@ -43,11 +55,10 @@ class InstaFollower:
         time.sleep(2)
 
         # Look for any buttons on the page containing the text 'Decline' (usually a cookie consent banner)
-        # We use find_elements (plural) so it returns an empty list instead of crashing if it's not found
         decline = self.driver.find_elements(By.XPATH, "//button[contains(text(), 'Decline')]")
         # If the list is not empty (meaning the button was found)...
         if decline:
-            # ...click the first (and likely only) 'Decline' button in the list
+            # ...click the first 'Decline' button
             decline[0].click()
 
         # Find the input field where the username goes by looking for the HTML attribute name="username"
@@ -60,27 +71,22 @@ class InstaFollower:
         # Type the PASSWORD string into the password input field
         password.send_keys(PASSWORD)
         
-        # Pause for 1 second to mimic human typing behavior and ensure the fields register the input
+        # Pause for 1 second to mimic human typing behavior
         time.sleep(1)
-        # Simulate pressing the 'ENTER' key on the keyboard while focused on the password field to submit the form
+        # Simulate pressing the 'ENTER' key on the keyboard while focused on the password field
         password.send_keys(Keys.ENTER)
         # Pause for 2 seconds to allow the dashboard/homepage to load after logging in
         time.sleep(2)
 
         # Look for a popup dialog asking to save login info by searching for the text 'Not now'
         save_info = self.driver.find_elements(By.XPATH, "//div[contains(text(), 'Not now')]")
-        # If the 'Not now' element exists...
         if save_info:
-            # ...click it to dismiss the prompt
             save_info[0].click()
-        # Pause for 1 second to let the popup close
         time.sleep(1)
 
         # Look for a notification permission prompt by searching for a button containing 'Not Now'
         notifications = self.driver.find_elements(By.XPATH, "//button[contains(text(), 'Not Now')]")
-        # If the notification prompt exists...
         if notifications:
-            # ...click it to dismiss it
             notifications[0].click()
 
     # Method to navigate to the target profile and load their followers
@@ -90,44 +96,61 @@ class InstaFollower:
         # Pause for 2 seconds to let the followers modal/list load
         time.sleep(2)
 
-        # Find the specific HTML element that contains the scrollable list of followers using its CSS class
+        # Find the specific HTML element that contains the scrollable list of followers
         modal = self.driver.find_element(By.CSS_SELECTOR, ".followers-scroll")
         
         # Loop 10 times to scroll down the list and load more followers into the page
         for _ in range(10):
-            # Execute JavaScript directly in the browser to scroll the 'modal' element down to its maximum height
+            # Execute JavaScript directly in the browser to scroll the 'modal' element down
             self.driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", modal)
-            # Pause for 1 second after each scroll to allow the web app to fetch and load the next batch of users
+            # Pause for 1 second after each scroll
             time.sleep(1)
 
     # Method to click the "Follow" buttons on the loaded list
     def follow(self):
         # Find all button elements that are inside the scrollable followers list
         all_buttons = self.driver.find_elements(By.CSS_SELECTOR, ".followers-scroll button")
+        followed_count = 0
         
         # Iterate through every button found in that list
         for button in all_buttons:
-            # Try to execute the following block of code
             try:
                 # Click the "Follow" button
                 button.click()
-                # Pause for 1 second to avoid clicking too fast (which can trigger spam blocks)
+                followed_count += 1
+                # Pause for 1 second to avoid clicking too fast
                 time.sleep(1)
-            # If clicking the button throws an ElementClickInterceptedException (usually because a popup blocked it)...
             except ElementClickInterceptedException:
-                # ...this implies we clicked a button that said "Following", triggering an "Unfollow?" confirmation popup.
-                # Find the 'Cancel' button on that new popup dialog
+                # Find the 'Cancel' button on confirmation popup
                 cancel = self.driver.find_element(By.XPATH, "//button[contains(text(), 'Cancel')]")
-                # Click 'Cancel' to close the popup and remain following the user
                 cancel.click()
+        return followed_count
+
+    def close(self):
+        try:
+            self.driver.quit()
+        except Exception:
+            pass
+
+
+def run_bot(headless=True):
+    bot = None
+    try:
+        bot = InstaFollower(headless=headless)
+        bot.login()
+        bot.find_followers()
+        count = bot.follow()
+        return True, f"Successfully executed bot. Target account: '{SIMILAR_ACCOUNT}'. Followed users: {count}"
+    except Exception as e:
+        return False, f"Error executing bot: {str(e)}"
+    finally:
+        if bot:
+            bot.close()
 
 
 # --- EXECUTION ---
-# Create a new instance of the bot
-bot = InstaFollower()
-# Call the login method to authenticate
-bot.login()
-# Call the method to load the followers of the target account
-bot.find_followers()
-# Call the method to iterate through the list and click follow
-bot.follow()
+if __name__ == "__main__":
+    bot = InstaFollower()
+    bot.login()
+    bot.find_followers()
+    bot.follow()
