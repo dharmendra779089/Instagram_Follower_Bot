@@ -157,6 +157,7 @@ HTML_TEMPLATE = """
             border-radius: 50%;
             animation: rotation 1s linear infinite;
             display: inline-block;
+            flex-shrink: 0;
         }
 
         @keyframes rotation {
@@ -222,7 +223,7 @@ HTML_TEMPLATE = """
                 updateUI(data.status, data.message);
                 
                 if (data.status === 'running') {
-                    setTimeout(pollStatus, 3000);
+                    setTimeout(pollStatus, 1500);
                 } else {
                     isPolling = false;
                     const btn = document.getElementById('runBtn');
@@ -241,7 +242,7 @@ HTML_TEMPLATE = """
             statusContainer.className = 'status-card status-' + status;
             
             if (status === 'running') {
-                statusText.innerHTML = '<span class="spinner"></span> Running follower bot in headless browser...';
+                statusText.innerHTML = '<span class="spinner"></span> ' + message;
             } else {
                 statusText.innerText = message;
             }
@@ -258,12 +259,16 @@ HTML_TEMPLATE = """
 def index():
     return render_template_string(HTML_TEMPLATE, target_account=SIMILAR_ACCOUNT)
 
+def log_progress(msg):
+    global execution_status
+    execution_status["message"] = msg
+
 def execute_bot_background():
     global execution_status
     execution_status["status"] = "running"
-    execution_status["message"] = "Bot is currently running..."
+    execution_status["message"] = "Initializing Chromium..."
     
-    success, msg = run_bot(headless=True)
+    success, msg = run_bot(headless=True, log_callback=log_progress)
     
     if success:
         execution_status["status"] = "completed"
